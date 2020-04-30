@@ -22,6 +22,78 @@ const (
 	hugepages1Gi = v1.ResourceName(v1.ResourceHugePagesPrefix + "1Gi")
 )
 
+var (
+	machineInfo = cadvisorapi.MachineInfo{
+		Topology: []cadvisorapi.Node{
+			{
+				Id:     0,
+				Memory: 128 * gb,
+				HugePages: []cadvisorapi.HugePagesInfo{
+					{
+						PageSize: pageSize1Gb,
+						NumPages: 10,
+					},
+				},
+			},
+			{
+				Id:     1,
+				Memory: 128 * gb,
+				HugePages: []cadvisorapi.HugePagesInfo{
+					{
+						PageSize: pageSize1Gb,
+						NumPages: 10,
+					},
+				},
+			},
+		},
+	}
+	assignments = state.ContainerMemoryAssignments{
+		"fakePod1": map[string][]state.Block{
+			"fakeContainer1": {
+				{
+					NUMAAffinity: 0,
+					Type:         v1.ResourceMemory,
+					Size:         1 * gb,
+				},
+			},
+			"fakeContainer2": {
+				{
+					NUMAAffinity: 0,
+					Type:         v1.ResourceMemory,
+					Size:         1 * gb,
+				},
+			},
+		},
+	}
+	testPolicySingleNUMA = NewPolicySingleNUMA(&machineInfo, reserved, topologymanager.NewFakeManager())
+	machineState         = state.MemoryMap{
+		0: map[v1.ResourceName]*state.MemoryTable{
+			v1.ResourceMemory: {
+				Allocatable:    127 * gb,
+				Free:           125 * gb,
+				Reserved:       2 * gb,
+				SystemReserved: 1 * gb,
+				TotalMemSize:   128 * gb,
+			},
+			hugepages1Gi: {
+				Allocatable:    10 * gb,
+				Free:           10 * gb,
+				Reserved:       0,
+				SystemReserved: 0,
+				TotalMemSize:   10 * gb,
+			},
+		},
+	}
+	reserved = reservedMemory{
+		0: map[v1.ResourceName]uint64{
+			v1.ResourceMemory: 1 * gb,
+		},
+		1: map[v1.ResourceName]uint64{
+			v1.ResourceMemory: 1 * gb,
+		},
+	}
+)
+
 type mockState struct {
 	assignments  state.ContainerMemoryAssignments
 	machineState state.MemoryMap
@@ -145,66 +217,99 @@ func makePod(podUID, containerName, memoryRequest, memoryLimit string) *v1.Pod {
 	return pod
 }
 
-type testMemoryManager struct {
-	description string
+func TestRemoveContainer(t *testing.T) {
+	testPolicySingleNUMA := NewPolicySingleNUMA(&machineInfo, reserved, topologymanager.NewFakeManager())
+	testCases := []struct {
+		description                   string
+		remContainerID                string
+		policy                        Policy
+		expMachineState               state.MemoryMap
+		expContainerMemoryAssignments state.ContainerMemoryAssignments
+		expError                      error
+	}{
+		{
+			description:    "Correct removing of a container",
+			remContainerID: "fakeID1",
+			policy:         testPolicySingleNUMA,
+			expError:       nil,
+			expMachineState: state.MemoryMap{
+				0: map[v1.ResourceName]*state.MemoryTable{
+					v1.ResourceMemory: {
+						Allocatable:    127 * gb,
+						Free:           126 * gb,
+						Reserved:       1 * gb,
+						SystemReserved: 1 * gb,
+						TotalMemSize:   128 * gb,
+					},
+					hugepages1Gi: {
+						Allocatable:    10 * gb,
+						Free:           10 * gb,
+						Reserved:       0,
+						SystemReserved: 0,
+						TotalMemSize:   10 * gb,
+					},
+				},
+			},
+			expContainerMemoryAssignments: state.ContainerMemoryAssignments{
+				"fakePod1": map[string][]state.Block{
+					"fakeContainer2": {
+						{
+							NUMAAffinity: 0,
+							Type:         v1.ResourceMemory,
+							Size:         1 * gb,
+						},
+					},
+				},
+			},
+		},
+		{
+			description:    "Should fail if policy returns an error",
+			remContainerID: "fakeID1",
+			policy: &mockPolicy{
+				err: fmt.Errorf("Fake reg error"),
+			},
+			expError:                      fmt.Errorf("Fake reg error"),
+			expMachineState:               machineState,
+			expContainerMemoryAssignments: assignments,
+		},
+	}
+	for _, testCase := range testCases {
+		iniContainerMap := containermap.NewContainerMap()
+		iniContainerMap.Add("fakePod1", "fakeContainer1", "fakeID1")
+		iniContainerMap.Add("fakePod1", "fakeContainer2", "fakeID2")
+		mgr := &manager{
+			policy: testCase.policy,
+			state: &mockState{
+				assignments:  assignments,
+				machineState: machineState,
+			},
+			containerMap: iniContainerMap,
+			containerRuntime: mockRuntimeService{
+				err: testCase.expError,
+			},
+			activePods:        func() []*v1.Pod { return nil },
+			podStatusProvider: mockPodStatusProvider{},
+		}
+		mgr.sourcesReady = &sourcesReadyStub{}
+
+		err := mgr.RemoveContainer(testCase.remContainerID)
+		if !reflect.DeepEqual(err, testCase.expError) {
+			t.Errorf("Memory Manager RemoveContainer() error (%v), expected error: %v but got: %v",
+				testCase.description, testCase.expError, err)
+		}
+		if !reflect.DeepEqual(mgr.state.GetMemoryAssignments(), testCase.expContainerMemoryAssignments) {
+			t.Errorf("Memory Manager RemoveContainer() inconsistent assignment, expected: %+v but got: %+v",
+				testCase.expContainerMemoryAssignments, mgr.state.GetMemoryAssignments())
+		}
+
+		if !reflect.DeepEqual(mgr.state.GetMachineState(), testCase.expMachineState) {
+			t.Errorf("Memory Manager MachineState error, expected state %+v but got: %+v",
+				testCase.expMachineState[0]["memory"], mgr.state.GetMachineState()[0]["memory"])
+		}
+	}
 }
 
-func TestMemoryManagerStart(t *testing.T) {}
-func TestRemoveContainer(t *testing.T)    {}
-
 func TestAddContainer(t *testing.T) {
-	machineInfo := cadvisorapi.MachineInfo{
-		Topology: []cadvisorapi.Node{
-			{
-				Id:     0,
-				Memory: 128 * gb,
-				HugePages: []cadvisorapi.HugePagesInfo{
-					{
-						// size in KB
-						PageSize: pageSize1Gb,
-						NumPages: 10,
-					},
-				},
-			},
-			{
-				Id:     1,
-				Memory: 128 * gb,
-				HugePages: []cadvisorapi.HugePagesInfo{
-					{
-						// size in KB
-						PageSize: pageSize1Gb,
-						NumPages: 10,
-					},
-				},
-			},
-		},
-	}
-	machineState := state.MemoryMap{
-		0: map[v1.ResourceName]*state.MemoryTable{
-			v1.ResourceMemory: {
-				Allocatable:    128 * gb,
-				Free:           128 * gb,
-				Reserved:       1 * gb,
-				SystemReserved: 0 * gb,
-				TotalMemSize:   128 * gb,
-			},
-			hugepages1Gi: {
-				Allocatable:    10 * gb,
-				Free:           10 * gb,
-				Reserved:       0,
-				SystemReserved: 0,
-				TotalMemSize:   10 * gb,
-			},
-		},
-	}
-	reserved := reservedMemory{
-		0: map[v1.ResourceName]uint64{
-			v1.ResourceMemory: 1 * gb,
-		},
-		1: map[v1.ResourceName]uint64{
-			v1.ResourceMemory: 1 * gb,
-		},
-	}
 	testPolicySingleNUMA := NewPolicySingleNUMA(&machineInfo, reserved, topologymanager.NewFakeManager())
 
 	testCases := []struct {
@@ -213,41 +318,66 @@ func TestAddContainer(t *testing.T) {
 		policy             Policy
 		expAllocateErr     error
 		expAddContainerErr error
+		expMachineState    state.MemoryMap
 	}{
 		{
-			description:        "Correct allocation and container add",
+			description:        "Correct allocation and adding container",
 			updateErr:          nil,
 			policy:             testPolicySingleNUMA,
 			expAllocateErr:     nil,
 			expAddContainerErr: nil,
+			expMachineState: state.MemoryMap{
+				0: map[v1.ResourceName]*state.MemoryTable{
+					v1.ResourceMemory: {
+						Allocatable:    127 * gb,
+						Free:           124 * gb,
+						Reserved:       3 * gb,
+						SystemReserved: 1 * gb,
+						TotalMemSize:   128 * gb,
+					},
+					hugepages1Gi: {
+						Allocatable:    10 * gb,
+						Free:           10 * gb,
+						Reserved:       0,
+						SystemReserved: 0,
+						TotalMemSize:   10 * gb,
+					},
+				},
+			},
 		},
 		{
-			description: "Policy returns an error",
+			description:        "Correct allocation and adding container with none policy",
+			updateErr:          nil,
+			policy:             NewPolicyNone(),
+			expAllocateErr:     nil,
+			expAddContainerErr: nil,
+			expMachineState:    machineState,
+		},
+		{
+			description: "Allocation should fail if policy returns an error",
 			updateErr:   nil,
 			policy: &mockPolicy{
 				err: fmt.Errorf("Fake reg error"),
 			},
 			expAllocateErr:     fmt.Errorf("Fake reg error"),
 			expAddContainerErr: nil,
+			expMachineState:    machineState,
 		},
 		{
-			description:        "ContainerRuntime returns an error",
+			description:        "Adding container should fail but without an error",
 			updateErr:          fmt.Errorf("Fake reg error"),
 			policy:             testPolicySingleNUMA,
 			expAllocateErr:     nil,
 			expAddContainerErr: nil,
+			expMachineState:    machineState,
 		},
 	}
-	//1.Allocating and adding Containers
-	//2.Setting reserved MemoryMap
 
-	for i, testCase := range testCases {
-		fmt.Printf("Test case: %v\n", i)
+	for _, testCase := range testCases {
 		mgr := &manager{
 			policy: testCase.policy,
 			state: &mockState{
-				assignments: state.ContainerMemoryAssignments{},
-				//machineState: state.MemoryMap{},
+				assignments:  state.ContainerMemoryAssignments{},
 				machineState: machineState,
 			},
 			containerMap: containermap.NewContainerMap(),
@@ -259,7 +389,7 @@ func TestAddContainer(t *testing.T) {
 		}
 		mgr.sourcesReady = &sourcesReadyStub{}
 
-		pod := makePod("fakePod", "fakeContainer", "1G", "1G")
+		pod := makePod("fakePod", "fakeContainer", "1Gi", "1Gi")
 		container := &pod.Spec.Containers[0]
 		err := mgr.Allocate(pod, container)
 		if !reflect.DeepEqual(err, testCase.expAllocateErr) {
@@ -271,5 +401,63 @@ func TestAddContainer(t *testing.T) {
 			t.Errorf("Memory Manager AddContainer() error (%v), expected error: %v but got: %v",
 				testCase.description, testCase.expAddContainerErr, err)
 		}
+
+		if !reflect.DeepEqual(mgr.state.GetMachineState(), testCase.expMachineState) {
+			t.Errorf("Memory Manager MachineState error, expected state %+v but got: %+v",
+				testCase.expMachineState[0]["memory"], mgr.state.GetMachineState()[0]["memory"])
+		}
+
 	}
 }
+
+func TestRemoveStaleState(t *testing.T) {
+	testCases := []struct {
+		description                   string
+		policy                        Policy
+		expError                      error
+		expContainerMemoryAssignments state.ContainerMemoryAssignments
+	}{
+		{
+			description: "Should fail - policy returns an error",
+			policy: &mockPolicy{
+				err: fmt.Errorf("Policy error"),
+			},
+			expContainerMemoryAssignments: assignments,
+		},
+		{
+			description:                   "Stale state succesfuly removed",
+			policy:                        testPolicySingleNUMA,
+			expContainerMemoryAssignments: state.ContainerMemoryAssignments{},
+		},
+	}
+	for _, testCase := range testCases {
+		mgr := &manager{
+			policy: testCase.policy,
+			state: &mockState{
+				assignments:  assignments,
+				machineState: machineState,
+			},
+			containerMap: containermap.NewContainerMap(),
+			containerRuntime: mockRuntimeService{
+				err: nil,
+			},
+			activePods:        func() []*v1.Pod { return nil },
+			podStatusProvider: mockPodStatusProvider{},
+		}
+		mgr.sourcesReady = &sourcesReadyStub{}
+
+		mgr.removeStaleState()
+
+		if !reflect.DeepEqual(mgr.state.GetMemoryAssignments(), testCase.expContainerMemoryAssignments) {
+			t.Errorf("Memory Manager removeStaleState() error, expected assignments %v but got: %v",
+				testCase.expContainerMemoryAssignments, mgr.state.GetMemoryAssignments())
+		}
+
+	}
+}
+
+//TODOs:
+//func TestGetTopologyHints(t *testing.T)  {}
+//func TestGetReservedMemory(t *testing.T) {}
+//func TestAddWithInitContainers(t *testing.T) {}
+//func TestMemoryManagerStart(t *testing.T) {}
