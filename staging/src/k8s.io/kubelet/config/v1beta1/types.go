@@ -445,7 +445,7 @@ type KubeletConfiguration struct {
 	// "pod" scope requires the TopologyManager feature gate to be enabled.
 	// Default: "container"
 	// +optional
-	TopologyManagerScope string
+	TopologyManagerScope string `json:"topologyManagerScope,omitempty"`
 	// qosReserved is a set of resource name to percentage pairs that specify
 	// the minimum percentage of a resource reserved for exclusive use by the
 	// guaranteed QoS tier.
