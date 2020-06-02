@@ -64,6 +64,23 @@ func (pdev podDevices) delete(pods []string) {
 	}
 }
 
+// Returns list of device Ids allocated to the given pod for the given resource.
+// Returns nil if we don't have cached state for the given <podUID, resource>.
+func (pdev podDevices) podDevices(podUID, resource string) sets.String {
+	if _, podExists := pdev[podUID]; !podExists {
+		return nil
+	}
+
+	ret := sets.NewString()
+	for _, resources := range pdev[podUID] {
+		for _, devs := range resources {
+			ret = ret.Union(devs.deviceIds)
+		}
+	}
+	return ret
+}
+
+
 // Returns list of device Ids allocated to the given container for the given resource.
 // Returns nil if we don't have cached state for the given <podUID, contName, resource>.
 func (pdev podDevices) containerDevices(podUID, contName, resource string) sets.String {

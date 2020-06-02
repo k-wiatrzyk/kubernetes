@@ -83,7 +83,49 @@ func (m *ManagerImpl) GetTopologyHints(pod *v1.Pod, container *v1.Container) map
 // GetPodLevelTopologyHints implements the TopologyManager HintProvider Interface which
 // ensures the Device Manager is consulted when Topology Aware Hints for Pod are created.
 func (m *ManagerImpl) GetPodLevelTopologyHints(pod *v1.Pod) map[string][]topologymanager.TopologyHint {
-	return nil
+	// Garbage collect any stranded device resources before providing TopologyHints
+	m.UpdateAllocatedDevices()
+
+	deviceHints := make(map[string][]topologymanager.TopologyHint)
+	accumulatedResourceRequests := m.getPodDeviceRequest(pod)
+
+	for resource, requested := range accumulatedResourceRequests {
+		// Only consider devices that actually container topology information.
+		if aligned := m.deviceHasTopologyAlignment(resource); !aligned {
+			klog.Infof("[devicemanager] Resource '%v' does not have a topology preference", resource)
+			deviceHints[resource] = nil
+			continue
+		}
+
+		// Short circuit to regenerate the same hints if there are already
+		// devices allocated to the Pod. This might happen after a
+		// kubelet restart, for example.
+		allocated := m.podDevices.podDevices(string(pod.UID), resource)
+		if allocated.Len() > 0 {
+			if allocated.Len() != requested {
+			klog.Errorf("[devicemanager] Resource '%v' already allocated to (pod %v) with different number than request: requested: %d, allocated: %d", resource, string(pod.UID), requested, allocated.Len())
+				deviceHints[resource] = []topologymanager.TopologyHint{}
+				continue
+			}
+			klog.Infof("[devicemanager] Regenerating TopologyHints for resource '%v' already allocated to (pod %v)", resource, string(pod.UID))
+			deviceHints[resource] = m.generateDeviceTopologyHints(resource, allocated, requested)
+			continue
+		}
+
+		// Get the list of available devices, for which TopologyHints should be generated.
+		available := m.getAvailableDevices(resource)
+		if available.Len() < requested {
+			klog.Errorf("[devicemanager] Unable to generate topology hints: requested number of devices unavailable for '%s': requested: %d, available: %d", resource, requested, available.Len())
+			deviceHints[resource] = []topologymanager.TopologyHint{}
+			continue
+		}
+
+		// Generate TopologyHints for this resource given the current
+		// request size and the list of available devices.
+		deviceHints[resource] = m.generateDeviceTopologyHints(resource, available, requested)
+	}
+
+	return deviceHints
 }
 
 func (m *ManagerImpl) deviceHasTopologyAlignment(resource string) bool {
@@ -177,4 +219,51 @@ func (m *ManagerImpl) getNUMANodeIds(topology *pluginapi.TopologyInfo) []int {
 		ids = append(ids, int(n.ID))
 	}
 	return ids
+
+func (m *ManagerImpl) getPodDeviceRequest(pod *v1.Pod) map[string]int {
+	// compute the max number of resource request
+	initContainerResources := make(map[string]int)
+
+	for _, container := range pod.Spec.InitContainers {
+		for resourceObj, requestedObj := range container.Resources.Limits {
+			resource := string(resourceObj)
+			requested := int(requestedObj.Value())
+
+			if m.isDevicePluginResource(resource) {
+				if stored, ok := initContainerResources[resource]; ok {
+					if requested > stored {
+						initContainerResources[resource] = requested
+					}
+				} else {
+					initContainerResources[resource] = requested
+				}
+			}
+		}
+	}
+
+	// compute the sum of device request of user container
+	userContainerResources := make(map[string]int)
+	for _, container := range pod.Spec.Containers {
+		for resourceObj, requestedObj := range container.Resources.Limits {
+			resource := string(resourceObj)
+			requested := int(requestedObj.Value())
+
+			if m.isDevicePluginResource(resource) {
+				userContainerResources[resource] +=requested
+			}
+		}
+	}
+
+	// compare them and take the bigger number
+	for userResource, userRequested := range userContainerResources {
+		if initRequested, ok := initContainerResources[userResource]; ok {
+			if userRequested > initRequested {
+				initContainerResources[userResource] = userRequested
+			}
+		} else {
+			initContainerResources[userResource] = userRequested
+		}
+	}
+
+	return initContainerResources
 }
