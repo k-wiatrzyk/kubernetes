@@ -25,6 +25,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
+	"k8s.io/kubernetes/pkg/kubelet/util/format"
 )
 
 const (
@@ -37,10 +38,6 @@ const (
 	// present on a machine and the TopologyManager is enabled, an error will
 	// be returned and the TopologyManager will not be loaded.
 	maxAllowableNUMANodes = 8
-	// containerScopeTopology specifies the TopologyManagerScope per container.
-	containerScopeTopology = "container"
-	// podScopeTopology specifies the TopologyManagerScope per pod.
-	podScopeTopology = "pod"
 )
 
 const (
@@ -77,7 +74,7 @@ type manager struct {
 	//Topology Manager Policy
 	policy Policy
 	//Topology Manager Scope
-	topologyScope string
+	scope string
 }
 
 // HintProvider is an interface for components that want to collaborate to
@@ -92,9 +89,9 @@ type HintProvider interface {
 	// a consensus "best" hint. The hint providers may subsequently query the
 	// topology manager to influence actual resource assignment.
 	GetTopologyHints(pod *v1.Pod, container *v1.Container) map[string][]TopologyHint
-	// GetPodLevelTopologyHints returns a map of resource names to a list of possible
+	// GetPodTopologyHints returns a map of resource names to a list of possible
 	// concrete resource allocations per Pod in terms of NUMA locality hints.
-	GetPodLevelTopologyHints(pod *v1.Pod) map[string][]TopologyHint
+	GetPodTopologyHints(pod *v1.Pod) map[string][]TopologyHint
 	// Allocate triggers resource allocation to occur on the HintProvider after
 	// all hints have been gathered and the aggregated Hint is available via a
 	// call to Store.GetAffinity().
@@ -169,7 +166,7 @@ func NewManager(topology []cadvisorapi.Node, topologyPolicyName string, topology
 		return nil, fmt.Errorf("unknown policy: \"%s\"", topologyPolicyName)
 	}
 
-	if topologyScopeName != containerScopeTopology && topologyScopeName != podScopeTopology {
+	if topologyScopeName != containerTopologyScope && topologyScopeName != podTopologyScope {
 		return nil, fmt.Errorf("unknown scope: \"%s\"", topologyScopeName)
 	}
 
@@ -181,7 +178,7 @@ func NewManager(topology []cadvisorapi.Node, topologyPolicyName string, topology
 		podTopologyHints: pth,
 		podMap:           pm,
 		policy:           policy,
-		topologyScope:    topologyScopeName,
+		scope:            topologyScopeName,
 	}
 
 	return manager, nil
@@ -198,7 +195,7 @@ func (m *manager) accumulateProvidersHints(pod *v1.Pod, container *v1.Container)
 		// Get the TopologyHints from a provider.
 		hints := provider.GetTopologyHints(pod, container)
 		providersHints = append(providersHints, hints)
-		klog.Infof("[topologymanager] TopologyHints for pod '%v', container '%v': %v", pod.Name, container.Name, hints)
+		klog.Infof("[topologymanager] TopologyHints for pod '%v', container '%v': %v", format.Pod(pod), container.Name, hints)
 	}
 	return providersHints
 }
@@ -264,21 +261,21 @@ func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitR
 		}
 		return lifecycle.PodAdmitResult{Admit: true}
 	}
-	klog.Infof("[topologymanager] Topology Scope : %v", m.topologyScope)
-	if m.topologyScope == podScopeTopology {
-		return m.podBasisAdmit(pod)
+	klog.Infof("[topologymanager] Topology Scope : %v", m.scope)
+	if m.scope == podTopologyScope {
+		return m.podAdmit(pod)
 	}
 
-	return m.containerBasisAdmit(pod)
+	return m.containerAdmit(pod)
 }
 
-func (m *manager) containerBasisAdmit(pod *v1.Pod) lifecycle.PodAdmitResult {
+func (m *manager) containerAdmit(pod *v1.Pod) lifecycle.PodAdmitResult {
 	for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 		result, admit := m.calculateAffinity(pod, &container)
 		if !admit {
 			return podAdmitError(topologyAffinityError, nil)
 		}
-		klog.Infof("[topologymanager] Topology Affinity for (pod: %v container: %v): %v", pod.UID, container.Name, result)
+		klog.Infof("[topologymanager] Topology Affinity for (pod: %v container: %v): %v", format.Pod(pod), container.Name, result)
 		if m.podTopologyHints[string(pod.UID)] == nil {
 			m.podTopologyHints[string(pod.UID)] = make(map[string]TopologyHint)
 		}
@@ -292,13 +289,13 @@ func (m *manager) containerBasisAdmit(pod *v1.Pod) lifecycle.PodAdmitResult {
 	return lifecycle.PodAdmitResult{Admit: true}
 }
 
-func (m *manager) podBasisAdmit(pod *v1.Pod) lifecycle.PodAdmitResult {
+func (m *manager) podAdmit(pod *v1.Pod) lifecycle.PodAdmitResult {
 	var providersHints []map[string][]TopologyHint
 	for _, provider := range m.hintProviders {
 		// Get the TopologyHints for Pod from a provider.
-		hints := provider.GetPodLevelTopologyHints(pod)
+		hints := provider.GetPodTopologyHints(pod)
 		providersHints = append(providersHints, hints)
-		klog.Infof("[topologymanager] TopologyHints for pod '%v': %v", pod.Name, hints)
+		klog.Infof("[topologymanager] TopologyHints for pod '%v': %v", format.Pod(pod), hints)
 	}
 	result, admit := m.policy.Merge(providersHints)
 	klog.Infof("[topologymanager] Best TopologyHint for pod : %v", result)
@@ -309,7 +306,7 @@ func (m *manager) podBasisAdmit(pod *v1.Pod) lifecycle.PodAdmitResult {
 		m.podTopologyHints[string(pod.UID)] = make(map[string]TopologyHint)
 	}
 	for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
-		klog.Infof("[topologymanager] Topology Affinity for (pod: %v container: %v): %v", pod.UID, container.Name, result)
+		klog.Infof("[topologymanager] Topology Affinity for (pod: %v container: %v): %v", format.Pod(pod), container.Name, result)
 		m.podTopologyHints[string(pod.UID)][container.Name] = result
 		err := m.allocateAlignedResources(pod, &container)
 		if err != nil {

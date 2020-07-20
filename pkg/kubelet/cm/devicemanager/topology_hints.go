@@ -23,6 +23,7 @@ import (
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
+	"k8s.io/kubernetes/pkg/kubelet/util/format"
 )
 
 // GetTopologyHints implements the TopologyManager HintProvider Interface which
@@ -53,11 +54,11 @@ func (m *ManagerImpl) GetTopologyHints(pod *v1.Pod, container *v1.Container) map
 			allocated := m.podDevices.containerDevices(string(pod.UID), container.Name, resource)
 			if allocated.Len() > 0 {
 				if allocated.Len() != requested {
-					klog.Errorf("[devicemanager] Resource '%v' already allocated to (pod %v, container %v) with different number than request: requested: %d, allocated: %d", resource, string(pod.UID), container.Name, requested, allocated.Len())
+					klog.Errorf("[devicemanager] Resource '%v' already allocated to (pod %v, container %v) with different number than request: requested: %d, allocated: %d", resource, format.Pod(pod), container.Name, requested, allocated.Len())
 					deviceHints[resource] = []topologymanager.TopologyHint{}
 					continue
 				}
-				klog.Infof("[devicemanager] Regenerating TopologyHints for resource '%v' already allocated to (pod %v, container %v)", resource, string(pod.UID), container.Name)
+				klog.Infof("[devicemanager] Regenerating TopologyHints for resource '%v' already allocated to (pod %v, container %v)", resource, format.Pod(pod), container.Name)
 				deviceHints[resource] = m.generateDeviceTopologyHints(resource, allocated, sets.String{}, requested)
 				continue
 			}
@@ -80,9 +81,9 @@ func (m *ManagerImpl) GetTopologyHints(pod *v1.Pod, container *v1.Container) map
 	return deviceHints
 }
 
-// GetPodLevelTopologyHints implements the TopologyManager HintProvider Interface which
+// GetPodTopologyHints implements the topologymanager.HintProvider Interface which
 // ensures the Device Manager is consulted when Topology Aware Hints for Pod are created.
-func (m *ManagerImpl) GetPodLevelTopologyHints(pod *v1.Pod) map[string][]topologymanager.TopologyHint {
+func (m *ManagerImpl) GetPodTopologyHints(pod *v1.Pod) map[string][]topologymanager.TopologyHint {
 	// Garbage collect any stranded device resources before providing TopologyHints
 	m.UpdateAllocatedDevices()
 
@@ -90,7 +91,7 @@ func (m *ManagerImpl) GetPodLevelTopologyHints(pod *v1.Pod) map[string][]topolog
 	accumulatedResourceRequests := m.getPodDeviceRequest(pod)
 
 	for resource, requested := range accumulatedResourceRequests {
-		// Only consider devices that actually container topology information.
+		// Only consider devices that actually contain topology information.
 		if aligned := m.deviceHasTopologyAlignment(resource); !aligned {
 			klog.Infof("[devicemanager] Resource '%v' does not have a topology preference", resource)
 			deviceHints[resource] = nil
@@ -103,17 +104,18 @@ func (m *ManagerImpl) GetPodLevelTopologyHints(pod *v1.Pod) map[string][]topolog
 		allocated := m.podDevices.podDevices(string(pod.UID), resource)
 		if allocated.Len() > 0 {
 			if allocated.Len() != requested {
-			klog.Errorf("[devicemanager] Resource '%v' already allocated to (pod %v) with different number than request: requested: %d, allocated: %d", resource, string(pod.UID), requested, allocated.Len())
+				klog.Errorf("[devicemanager] Resource '%v' already allocated to (pod %v) with different number than request: requested: %d, allocated: %d", resource, format.Pod(pod), requested, allocated.Len())
 				deviceHints[resource] = []topologymanager.TopologyHint{}
 				continue
 			}
-			klog.Infof("[devicemanager] Regenerating TopologyHints for resource '%v' already allocated to (pod %v)", resource, string(pod.UID))
-			deviceHints[resource] = m.generateDeviceTopologyHints(resource, allocated, requested)
+			klog.Infof("[devicemanager] Regenerating TopologyHints for resource '%v' already allocated to (pod %v)", resource, format.Pod(pod))
+			deviceHints[resource] = m.generateDeviceTopologyHints(resource, allocated, sets.String{}, requested)
 			continue
 		}
 
 		// Get the list of available devices, for which TopologyHints should be generated.
 		available := m.getAvailableDevices(resource)
+		reusable := m.devicesToReuse[string(pod.UID)][resource]
 		if available.Len() < requested {
 			klog.Errorf("[devicemanager] Unable to generate topology hints: requested number of devices unavailable for '%s': requested: %d, available: %d", resource, requested, available.Len())
 			deviceHints[resource] = []topologymanager.TopologyHint{}
@@ -122,7 +124,7 @@ func (m *ManagerImpl) GetPodLevelTopologyHints(pod *v1.Pod) map[string][]topolog
 
 		// Generate TopologyHints for this resource given the current
 		// request size and the list of available devices.
-		deviceHints[resource] = m.generateDeviceTopologyHints(resource, available, requested)
+		deviceHints[resource] = m.generateDeviceTopologyHints(resource, available, reusable, requested)
 	}
 
 	return deviceHints
@@ -219,6 +221,7 @@ func (m *ManagerImpl) getNUMANodeIds(topology *pluginapi.TopologyInfo) []int {
 		ids = append(ids, int(n.ID))
 	}
 	return ids
+}
 
 func (m *ManagerImpl) getPodDeviceRequest(pod *v1.Pod) map[string]int {
 	// compute the max number of resource request
@@ -249,7 +252,7 @@ func (m *ManagerImpl) getPodDeviceRequest(pod *v1.Pod) map[string]int {
 			requested := int(requestedObj.Value())
 
 			if m.isDevicePluginResource(resource) {
-				userContainerResources[resource] +=requested
+				userContainerResources[resource] += requested
 			}
 		}
 	}

@@ -116,8 +116,8 @@ func TestManagerScope(t *testing.T) {
 			}
 		} else {
 			rawMgr := mngr.(*manager)
-			if rawMgr.topologyScope != tc.expectedScope {
-				t.Errorf("Unexpected scope name. Have: %q wants %q", rawMgr.topologyScope, tc.expectedScope)
+			if rawMgr.scope != tc.expectedScope {
+				t.Errorf("Unexpected scope name. Have: %q wants %q", rawMgr.scope, tc.expectedScope)
 			}
 		}
 	}
@@ -134,7 +134,7 @@ func (m *mockHintProvider) GetTopologyHints(pod *v1.Pod, container *v1.Container
 	return m.th
 }
 
-func (m *mockHintProvider) GetPodLevelTopologyHints(pod *v1.Pod) map[string][]TopologyHint {
+func (m *mockHintProvider) GetPodTopologyHints(pod *v1.Pod) map[string][]TopologyHint {
 	return m.th
 }
 
@@ -779,13 +779,13 @@ func TestAdmit(t *testing.T) {
 	for _, tc := range tcases {
 		man1 := manager{
 			policy:           tc.policy,
-			topologyScope:    containerScopeTopology,
+			scope:            containerTopologyScope,
 			podTopologyHints: make(map[string]map[string]TopologyHint),
 			hintProviders:    tc.hp,
 		}
 		man2 := manager{
 			policy:           tc.policy,
-			topologyScope:    podScopeTopology,
+			scope:            podTopologyScope,
 			podTopologyHints: make(map[string]map[string]TopologyHint),
 			hintProviders:    tc.hp,
 		}

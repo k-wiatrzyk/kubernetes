@@ -663,22 +663,22 @@ func TestGetPodDeviceRequest(t *testing.T) {
 		expected          map[string]int
 	}{
 		{
-			description:     "empty pod",
-			pod:             &v1.Pod{},
+			description:       "empty pod",
+			pod:               &v1.Pod{},
 			registeredDevices: []string{},
-			expected:        map[string]int{},
+			expected:          map[string]int{},
 		},
 		{
-			description:     "Init container requests device plugin resource",
-			pod:             &v1.Pod{
+			description: "Init container requests device plugin resource",
+			pod: &v1.Pod{
 				Spec: v1.PodSpec{
 					InitContainers: []v1.Container{
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
 								},
 							},
 						},
@@ -686,28 +686,28 @@ func TestGetPodDeviceRequest(t *testing.T) {
 				},
 			},
 			registeredDevices: []string{"gpu"},
-			expected:        map[string]int{"gpu" : 2},
+			expected:          map[string]int{"gpu": 2},
 		},
 		{
-			description:     "Init containers request device plugin resource",
-			pod:             &v1.Pod{
+			description: "Init containers request device plugin resource",
+			pod: &v1.Pod{
 				Spec: v1.PodSpec{
 					InitContainers: []v1.Container{
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
 								},
 							},
 						},
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("4"),
+									v1.ResourceName("gpu"):             resource.MustParse("4"),
 								},
 							},
 						},
@@ -715,19 +715,19 @@ func TestGetPodDeviceRequest(t *testing.T) {
 				},
 			},
 			registeredDevices: []string{"gpu"},
-			expected:        map[string]int{"gpu" : 4},
+			expected:          map[string]int{"gpu": 4},
 		},
 		{
-			description:     "User container requests device plugin resource",
-			pod:             &v1.Pod{
+			description: "User container requests device plugin resource",
+			pod: &v1.Pod{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
 								},
 							},
 						},
@@ -735,30 +735,30 @@ func TestGetPodDeviceRequest(t *testing.T) {
 				},
 			},
 			registeredDevices: []string{"gpu"},
-			expected:        map[string]int{"gpu" : 2},
+			expected:          map[string]int{"gpu": 2},
 		},
 		{
-			description:     "Init containers and user containers request the same amount of device plugin resources",
-			pod:             &v1.Pod{
+			description: "Init containers and user containers request the same amount of device plugin resources",
+			pod: &v1.Pod{
 				Spec: v1.PodSpec{
 					InitContainers: []v1.Container{
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
-									v1.ResourceName("nic"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
+									v1.ResourceName("nic"):             resource.MustParse("2"),
 								},
 							},
 						},
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
-									v1.ResourceName("nic"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
+									v1.ResourceName("nic"):             resource.MustParse("2"),
 								},
 							},
 						},
@@ -767,20 +767,20 @@ func TestGetPodDeviceRequest(t *testing.T) {
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("1"),
-									v1.ResourceName("nic"): resource.MustParse("1"),
+									v1.ResourceName("gpu"):             resource.MustParse("1"),
+									v1.ResourceName("nic"):             resource.MustParse("1"),
 								},
 							},
 						},
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("1"),
-									v1.ResourceName("nic"): resource.MustParse("1"),
+									v1.ResourceName("gpu"):             resource.MustParse("1"),
+									v1.ResourceName("nic"):             resource.MustParse("1"),
 								},
 							},
 						},
@@ -788,30 +788,30 @@ func TestGetPodDeviceRequest(t *testing.T) {
 				},
 			},
 			registeredDevices: []string{"gpu", "nic"},
-			expected:        map[string]int{"gpu" : 2, "nic" : 2},
+			expected:          map[string]int{"gpu": 2, "nic": 2},
 		},
 		{
-			description:     "Init containers request more device plugin resources than user containers",
-			pod:             &v1.Pod{
+			description: "Init containers request more device plugin resources than user containers",
+			pod: &v1.Pod{
 				Spec: v1.PodSpec{
 					InitContainers: []v1.Container{
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
-									v1.ResourceName("nic"): resource.MustParse("1"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
+									v1.ResourceName("nic"):             resource.MustParse("1"),
 								},
 							},
 						},
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("3"),
-									v1.ResourceName("nic"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("3"),
+									v1.ResourceName("nic"):             resource.MustParse("2"),
 								},
 							},
 						},
@@ -820,19 +820,19 @@ func TestGetPodDeviceRequest(t *testing.T) {
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("1"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("1"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("1"),
-									v1.ResourceName("nic"): resource.MustParse("1"),
+									v1.ResourceName("gpu"):             resource.MustParse("1"),
+									v1.ResourceName("nic"):             resource.MustParse("1"),
 								},
 							},
 						},
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("1"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("1"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("1"),
+									v1.ResourceName("gpu"):             resource.MustParse("1"),
 								},
 							},
 						},
@@ -840,30 +840,30 @@ func TestGetPodDeviceRequest(t *testing.T) {
 				},
 			},
 			registeredDevices: []string{"gpu", "nic"},
-			expected:        map[string]int{"gpu" : 3, "nic" : 2},
+			expected:          map[string]int{"gpu": 3, "nic": 2},
 		},
 		{
-			description:     "User containers request more device plugin resources than init containers",
-			pod:             &v1.Pod{
+			description: "User containers request more device plugin resources than init containers",
+			pod: &v1.Pod{
 				Spec: v1.PodSpec{
 					InitContainers: []v1.Container{
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
-									v1.ResourceName("nic"): resource.MustParse("1"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
+									v1.ResourceName("nic"):             resource.MustParse("1"),
 								},
 							},
 						},
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("2"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("2"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("2"),
-									v1.ResourceName("nic"): resource.MustParse("1"),
+									v1.ResourceName("gpu"):             resource.MustParse("2"),
+									v1.ResourceName("nic"):             resource.MustParse("1"),
 								},
 							},
 						},
@@ -872,20 +872,20 @@ func TestGetPodDeviceRequest(t *testing.T) {
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("1"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("1"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("3"),
-									v1.ResourceName("nic"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("3"),
+									v1.ResourceName("nic"):             resource.MustParse("2"),
 								},
 							},
 						},
 						{
 							Resources: v1.ResourceRequirements{
 								Limits: v1.ResourceList{
-									v1.ResourceName(v1.ResourceCPU): resource.MustParse("1"),
+									v1.ResourceName(v1.ResourceCPU):    resource.MustParse("1"),
 									v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
-									v1.ResourceName("gpu"): resource.MustParse("3"),
-									v1.ResourceName("nic"): resource.MustParse("2"),
+									v1.ResourceName("gpu"):             resource.MustParse("3"),
+									v1.ResourceName("nic"):             resource.MustParse("2"),
 								},
 							},
 						},
@@ -893,7 +893,7 @@ func TestGetPodDeviceRequest(t *testing.T) {
 				},
 			},
 			registeredDevices: []string{"gpu", "nic"},
-			expected:        map[string]int{"gpu" : 6, "nic" : 4},
+			expected:          map[string]int{"gpu": 6, "nic": 4},
 		},
 	}
 
@@ -914,7 +914,7 @@ func TestGetPodDeviceRequest(t *testing.T) {
 	}
 }
 
-func TestGetPodLevelTopologyHints(t *testing.T) {
+func TestGetPodTopologyHints(t *testing.T) {
 	tcases := getCommonTestCases()
 	tcases = append(tcases, getPodScopeTestCases()...)
 
@@ -925,7 +925,7 @@ func TestGetPodLevelTopologyHints(t *testing.T) {
 			allocatedDevices: make(map[string]sets.String),
 			podDevices:       make(podDevices),
 			sourcesReady:     &sourcesReadyStub{},
-			activePods:       func() []*v1.Pod { return []*v1.Pod{tc.pod, &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID:"fakeOtherPod",},},} },
+			activePods:       func() []*v1.Pod { return []*v1.Pod{tc.pod, {ObjectMeta: metav1.ObjectMeta{UID: "fakeOtherPod"}}} },
 			numaNodes:        []int{0, 1},
 		}
 
@@ -953,7 +953,7 @@ func TestGetPodLevelTopologyHints(t *testing.T) {
 			}
 		}
 
-		hints := m.GetPodLevelTopologyHints(tc.pod)
+		hints := m.GetPodTopologyHints(tc.pod)
 
 		for r := range tc.expectedHints {
 			sort.SliceStable(hints[r], func(i, j int) bool {
@@ -980,10 +980,10 @@ type topologyHintTestCase struct {
 func getCommonTestCases() []topologyHintTestCase {
 	return []topologyHintTestCase{
 		{
-			description:   "Single Request, no alignment",
+			description: "Single Request, no alignment",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1009,10 +1009,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Single Request, only one with alignment",
+			description: "Single Request, only one with alignment",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1047,10 +1047,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Single Request, one device per socket",
+			description: "Single Request, one device per socket",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1089,10 +1089,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Request for 2, one device per socket",
+			description: "Request for 2, one device per socket",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1123,10 +1123,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Request for 2, 2 devices per socket",
+			description: "Request for 2, 2 devices per socket",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1167,10 +1167,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Request for 2, optimal on 1 NUMA node, forced cross-NUMA",
+			description: "Request for 2, optimal on 1 NUMA node, forced cross-NUMA",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1210,10 +1210,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "2 device types, mixed configuration",
+			description: "2 device types, mixed configuration",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1268,10 +1268,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Single device type, more requested than available",
+			description: "Single device type, more requested than available",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1299,10 +1299,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Single device type, all already allocated to container",
+			description: "Single device type, all already allocated to container",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1344,10 +1344,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Single device type, less already allocated to container than requested",
+			description: "Single device type, less already allocated to container than requested",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1382,10 +1382,10 @@ func getCommonTestCases() []topologyHintTestCase {
 			},
 		},
 		{
-			description:   "Single device type, more already allocated to container than requested",
+			description: "Single device type, more already allocated to container than requested",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1428,7 +1428,7 @@ func getPodScopeTestCases() []topologyHintTestCase {
 			description: "2 device types, user container only",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1508,7 +1508,7 @@ func getPodScopeTestCases() []topologyHintTestCase {
 			description: "2 device types, request resources for init containers and user container",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					InitContainers: []v1.Container{
@@ -1608,7 +1608,7 @@ func getPodScopeTestCases() []topologyHintTestCase {
 			description: "2 device types, user container only, optimal on 1 NUMA node, forced cross-NUMA",
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					UID:  "fakePod",
+					UID: "fakePod",
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1680,4 +1680,3 @@ func getPodScopeTestCases() []topologyHintTestCase {
 		},
 	}
 }
-

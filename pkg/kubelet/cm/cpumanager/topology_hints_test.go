@@ -160,10 +160,9 @@ func TestGetPodRequestedCPU(t *testing.T) {
 
 func TestGetTopologyHints(t *testing.T) {
 	machineInfo := returnMachineInfo()
-	numaNodeInfo := returnNumaNodeInfo()
 
 	for _, tc := range returnTestCase() {
-		topology, _ := topology.Discover(&machineInfo, numaNodeInfo)
+		topology, _ := topology.Discover(&machineInfo)
 
 		var activePods []*v1.Pod
 		for p := range tc.assignments {
@@ -207,12 +206,11 @@ func TestGetTopologyHints(t *testing.T) {
 	}
 }
 
-func TestGetPodLevelTopologyHints(t *testing.T) {
+func TestGetPodTopologyHints(t *testing.T) {
 	machineInfo := returnMachineInfo()
-	numaNodeInfo := returnNumaNodeInfo()
 
 	for _, tc := range returnTestCase() {
-		topology, _ := topology.Discover(&machineInfo, numaNodeInfo)
+		topology, _ := topology.Discover(&machineInfo)
 
 		var activePods []*v1.Pod
 		for p := range tc.assignments {
@@ -240,18 +238,18 @@ func TestGetPodLevelTopologyHints(t *testing.T) {
 			sourcesReady:      &sourcesReadyStub{},
 		}
 
-		podLevelHints := m.GetPodLevelTopologyHints(&tc.pod)[string(v1.ResourceCPU)]
-		if len(tc.expectedHints) == 0 && len(podLevelHints) == 0 {
+		podHints := m.GetPodTopologyHints(&tc.pod)[string(v1.ResourceCPU)]
+		if len(tc.expectedHints) == 0 && len(podHints) == 0 {
 			continue
 		}
-		sort.SliceStable(podLevelHints, func(i, j int) bool {
-			return podLevelHints[i].LessThan(podLevelHints[j])
+		sort.SliceStable(podHints, func(i, j int) bool {
+			return podHints[i].LessThan(podHints[j])
 		})
 		sort.SliceStable(tc.expectedHints, func(i, j int) bool {
 			return tc.expectedHints[i].LessThan(tc.expectedHints[j])
 		})
-		if !reflect.DeepEqual(tc.expectedHints, podLevelHints) {
-			t.Errorf("Expected in result to be %v , got %v", tc.expectedHints, podLevelHints)
+		if !reflect.DeepEqual(tc.expectedHints, podHints) {
+			t.Errorf("Expected in result to be %v , got %v", tc.expectedHints, podHints)
 		}
 	}
 }

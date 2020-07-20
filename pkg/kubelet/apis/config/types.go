@@ -61,18 +61,18 @@ const (
 	// BestEffortTopologyManagerPolicy is a mode in which kubelet will favour
 	// pods with NUMA alignment of CPU and device resources.
 	BestEffortTopologyManagerPolicy = "best-effort"
-	// NoneTopologyManager Policy is a mode in which kubelet has no knowledge
+	// NoneTopologyManagerPolicy is a mode in which kubelet has no knowledge
 	// of NUMA alignment of a pod's CPU and device resources.
 	NoneTopologyManagerPolicy = "none"
-	// SingleNumaNodeTopologyManager Policy iis a mode in which kubelet only allows
+	// SingleNumaNodeTopologyManagerPolicy is a mode in which kubelet only allows
 	// pods with a single NUMA alignment of CPU and device resources.
-	SingleNumaNodeTopologyManager = "single-numa-node"
-	// ContainerTopologyScope represents that
+	SingleNumaNodeTopologyManagerPolicy = "single-numa-node"
+	// ContainerTopologyManagerScope represents that
 	// topology policy is applied on a per-container basis.
-	ContainerScopeTopology = "container"
-	// PodTopologyScope represents that
+	ContainerTopologyManagerScope = "container"
+	// PodTopologyManagerScope represents that
 	// topology policy is applied on a per-pod basis.
-	PodScopeTopology = "pod"
+	PodTopologyManagerScope = "pod"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -227,8 +227,8 @@ type KubeletConfiguration struct {
 	// TopologyManagerPolicy is the name of the policy to use.
 	// Policies other than "none" require the TopologyManager feature gate to be enabled.
 	TopologyManagerPolicy string
-	// Topology Manager Scope represents the scope of topology hint generation
-	// that topology manager requests and hint providers generates.
+	// TopologyManagerScope represents the scope of topology hint generation
+	// that topology manager requests and hint providers generate.
 	// "pod" scope requires the TopologyManager feature gate to be enabled.
 	// Default: "container"
 	// +optional

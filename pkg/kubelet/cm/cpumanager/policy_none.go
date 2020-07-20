@@ -56,6 +56,6 @@ func (p *nonePolicy) GetTopologyHints(s state.State, pod *v1.Pod, container *v1.
 	return nil
 }
 
-func (p *nonePolicy) GetPodLevelTopologyHints(s state.State, pod *v1.Pod) map[string][]topologymanager.TopologyHint {
+func (p *nonePolicy) GetPodTopologyHints(s state.State, pod *v1.Pod) map[string][]topologymanager.TopologyHint {
 	return nil
 }

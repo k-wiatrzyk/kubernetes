@@ -16,6 +16,7 @@ go_library(
     deps = [
         "//pkg/kubelet/cm/topologymanager/bitmask:go_default_library",
         "//pkg/kubelet/lifecycle:go_default_library",
+        "//pkg/kubelet/util/format:go_default_library",
         "//staging/src/k8s.io/api/core/v1:go_default_library",
         "//vendor/github.com/google/cadvisor/info/v1:go_default_library",
         "//vendor/k8s.io/klog/v2:go_default_library",
