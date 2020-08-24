@@ -23,12 +23,13 @@ import (
 
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestGetTopologyHints(t *testing.T) {
@@ -279,4 +280,102 @@ func TestGetTopologyHints(t *testing.T) {
 			t.Errorf("Expected in result to be %v , got %v", tc.expectedHints, hints)
 		}
 	}
+}
+
+
+func TestGetTopologyHintsReusableCPUs(t *testing.T) {
+	machineInfo := cadvisorapi.MachineInfo{
+		NumCores: 12,
+		Topology: []cadvisorapi.Node{
+			{Id: 0,
+				Cores: []cadvisorapi.Core{
+					{Id: 0, Threads: []int{0, 6}},
+					{Id: 1, Threads: []int{1, 7}},
+					{Id: 2, Threads: []int{2, 8}},
+				},
+			},
+			{Id: 1,
+				Cores: []cadvisorapi.Core{
+					{Id: 0, Threads: []int{3, 9}},
+					{Id: 1, Threads: []int{4, 10}},
+					{Id: 2, Threads: []int{5, 11}},
+				},
+			},
+		},
+	}
+	numaNodeInfo := topology.NUMANodeInfo{
+		0: cpuset.NewCPUSet(0, 6, 1, 7, 2, 8),
+		1: cpuset.NewCPUSet(3, 9, 4, 10, 5, 11),
+	}
+
+	pod := &v1.Pod{
+		Spec: v1.PodSpec{
+			InitContainers: []v1.Container{
+				{
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceName(v1.ResourceCPU):    resource.MustParse("1"),
+							v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
+						},
+						Limits: v1.ResourceList{
+							v1.ResourceName(v1.ResourceCPU):    resource.MustParse("1"),
+							v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
+						},
+					},
+				},
+			},
+			Containers: []v1.Container{
+				{
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceName(v1.ResourceCPU):    resource.MustParse("5"),
+							v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
+						},
+						Limits: v1.ResourceList{
+							v1.ResourceName(v1.ResourceCPU):    resource.MustParse("5"),
+							v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pod.UID = types.UID("fakePod")
+	pod.Spec.Containers[0].Name = "cont1"
+	pod.Spec.InitContainers[0].Name = "initCont1"
+
+	testInitContainer1 := &pod.Spec.InitContainers[0]
+	testContainer1 := &pod.Spec.Containers[0]
+	topology, _ := topology.Discover(&machineInfo, numaNodeInfo)
+
+	var activePods []*v1.Pod
+
+	m := manager{
+		policy: &staticPolicy{
+			affinity: topologymanager.NewFakeManager(),
+			topology: topology,
+			cpusToReuse: make(map[string]cpuset.CPUSet),
+		},
+		state: &mockState{
+			assignments:   state.ContainerCPUAssignments{},
+			defaultCPUSet: cpuset.NewCPUSet(2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+		},
+		topology:          topology,
+		activePods:        func() []*v1.Pod { return activePods },
+		podStatusProvider: mockPodStatusProvider{},
+		sourcesReady:      &sourcesReadyStub{},
+	}
+
+	// NUMA 0 has 4 free CPUs, init container required 1 CPU, it will be assigned there.
+	hints := m.GetTopologyHints(pod, testInitContainer1)[string(v1.ResourceCPU)]
+	// [{NUMANodeAffinity:01 Preferred:true} {NUMANodeAffinity:10 Preferred:true} {NUMANodeAffinity:11 Preferred:false}]
+	t.Logf("Hints: %+v", hints)
+	m.Allocate(pod, testInitContainer1)
+	activePods = append(activePods, pod)
+	// NUMA 1 has 6 free CPUs, app container require 5 CPUs, it should be assigned to 
+	// NUMA 1, however, reusableCPUs discard that node.
+	hints = m.GetTopologyHints(pod, testContainer1)[string(v1.ResourceCPU)]
+	// [{NUMANodeAffinity:11 Preferred:false}]
+	t.Logf("Hints: %+v", hints)
 }
