@@ -369,6 +369,7 @@ func (p *staticPolicy) generateCPUTopologyHints(availableCPUs cpuset.CPUSet, reu
 
 	// Iterate through all combinations of socket bitmask and build hints from them.
 	hints := []topologymanager.TopologyHint{}
+	alternativeHints := []topologymanager.TopologyHint{}
 	bitmask.IterateBitMasks(p.topology.CPUDetails.NUMANodes().ToSlice(), func(mask bitmask.BitMask) {
 		// First, update minAffinitySize and minSocketsOnMinAffinity for the
 		// current request size.
@@ -383,10 +384,12 @@ func (p *staticPolicy) generateCPUTopologyHints(availableCPUs cpuset.CPUSet, reu
 
 		// Then check to see if all of the reusable CPUs are part of the bitmask.
 		numMatching := 0
+		alternative := false
 		for _, c := range reusableCPUs.ToSlice() {
 			// Disregard this mask if its NUMANode isn't part of it.
 			if !mask.IsSet(p.topology.CPUDetails[c].NUMANodeID) {
-				return
+				alternative = true
+				break
 			}
 			numMatching++
 		}
@@ -407,23 +410,45 @@ func (p *staticPolicy) generateCPUTopologyHints(availableCPUs cpuset.CPUSet, reu
 		// Otherwise, create a new hint from the socket bitmask and add it to the
 		// list of hints.  We set all hint preferences to 'false' on the first
 		// pass through.
-		hints = append(hints, topologymanager.TopologyHint{
-			NUMANodeAffinity: mask,
-			Preferred:        false,
-		})
+
+		if alternative {
+			alternativeHints = append(hints, topologymanager.TopologyHint{
+				NUMANodeAffinity: mask,
+				Preferred:        false,
+			})
+		} else {
+			hints = append(hints, topologymanager.TopologyHint{
+				NUMANodeAffinity: mask,
+				Preferred:        false,
+			})
+		}
+
 	})
 
 	// Loop back through all hints and update the 'Preferred' field based on
 	// counting the number of bits sets in the affinity mask and comparing it
 	// to the minAffinitySize. Only those with an equal number of bits set (and
 	// with a minimal set of sockets) will be considered preferred.
+	minHintAffinity := p.topology.CPUDetails.NUMANodes().Size()
 	for i := range hints {
 		if hints[i].NUMANodeAffinity.Count() == minAffinitySize {
+			minHintAffinity = minAffinitySize
 			nodes := hints[i].NUMANodeAffinity.GetBits()
 			numSockets := p.topology.CPUDetails.SocketsInNUMANodes(nodes...).Size()
 			if numSockets == minSocketsOnMinAffinity {
 				hints[i].Preferred = true
 			}
+		}
+	}
+
+	for i := range alternativeHints {
+		if alternativeHints[i].NUMANodeAffinity.Count() < minHintAffinity {
+			nodes := alternativeHints[i].NUMANodeAffinity.GetBits()
+			numSockets := p.topology.CPUDetails.SocketsInNUMANodes(nodes...).Size()
+			if numSockets == minSocketsOnMinAffinity {
+				alternativeHints[i].Preferred = true
+			}
+			hints = append(hints, alternativeHints[i])
 		}
 	}
 
