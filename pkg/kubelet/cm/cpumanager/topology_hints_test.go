@@ -40,6 +40,12 @@ func TestGetTopologyHints(t *testing.T) {
 	testContainer3 := &testPod3.Spec.Containers[0]
 	testPod4 := makePod("fakePod", "fakeContainer", "11", "11")
 	testContainer4 := &testPod4.Spec.Containers[0]
+	testPod5 := makeMultiContainerPod(
+		[]struct{ request, limit string }{{"1", "1"}},
+		[]struct{ request, limit string }{{"5", "5"}},
+	)
+	testInitContainer1 := &testPod5.Spec.InitContainers[0]
+	testContainer5 := &testPod5.Spec.Containers[0]
 
 	firstSocketMask, _ := bitmask.NewBitMask(0)
 	secondSocketMask, _ := bitmask.NewBitMask(1)
@@ -73,6 +79,7 @@ func TestGetTopologyHints(t *testing.T) {
 	tcases := []struct {
 		name          string
 		pod           v1.Pod
+		initContainer v1.Container
 		container     v1.Container
 		assignments   state.ContainerCPUAssignments
 		defaultCPUSet cpuset.CPUSet
@@ -235,6 +242,24 @@ func TestGetTopologyHints(t *testing.T) {
 			defaultCPUSet: cpuset.NewCPUSet(),
 			expectedHints: []topologymanager.TopologyHint{},
 		},
+		{
+			name:          "App container cannot be allocated on the same NUMA node as init container, should be placed on another one",
+			pod:           *testPod5,
+			initContainer: *testInitContainer1,
+			container:     *testContainer5,
+			assignments:   state.ContainerCPUAssignments{},
+			defaultCPUSet: cpuset.NewCPUSet(2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+			expectedHints: []topologymanager.TopologyHint{
+				{
+					NUMANodeAffinity: crossSocketMask,
+					Preferred:        false,
+				},
+				{
+					NUMANodeAffinity: secondSocketMask,
+					Preferred:        true,
+				},
+			},
+		},
 	}
 	for _, tc := range tcases {
 		topology, _ := topology.Discover(&machineInfo, numaNodeInfo)
@@ -253,7 +278,9 @@ func TestGetTopologyHints(t *testing.T) {
 
 		m := manager{
 			policy: &staticPolicy{
-				topology: topology,
+				affinity:    topologymanager.NewFakeManager(),
+				topology:    topology,
+				cpusToReuse: make(map[string]cpuset.CPUSet),
 			},
 			state: &mockState{
 				assignments:   tc.assignments,
@@ -263,6 +290,11 @@ func TestGetTopologyHints(t *testing.T) {
 			activePods:        func() []*v1.Pod { return activePods },
 			podStatusProvider: mockPodStatusProvider{},
 			sourcesReady:      &sourcesReadyStub{},
+		}
+
+		if len(tc.pod.Spec.InitContainers) > 0 {
+			m.Allocate(&tc.pod, testInitContainer1)
+			activePods = append(activePods, &tc.pod)
 		}
 
 		hints := m.GetTopologyHints(&tc.pod, &tc.container)[string(v1.ResourceCPU)]
