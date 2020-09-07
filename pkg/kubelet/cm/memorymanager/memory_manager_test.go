@@ -2143,7 +2143,7 @@ func TestNewManager(t *testing.T) {
 	}
 	testCases := []testMemoryManager{
 		{
-			description:                "Successfuly created Memory Manager instance",
+			description:                "Successful creation of Memory Manager instance",
 			policyName:                 "single-numa",
 			machineInfo:                machineInfo,
 			nodeAllocatableReservation: v1.ResourceList{v1.ResourceMemory: *resource.NewQuantity(2*gb, resource.BinarySI)},
@@ -2156,7 +2156,7 @@ func TestNewManager(t *testing.T) {
 			expectedReserved: expectedReserved,
 		},
 		{
-			description:                "Should return an error where preReservedMemory is not correct",
+			description:                "Should return an error when preReservedMemory (configured with kubelet flag) does not comply with Node Allocatable feature values",
 			policyName:                 "single-numa",
 			machineInfo:                machineInfo,
 			nodeAllocatableReservation: v1.ResourceList{v1.ResourceMemory: *resource.NewQuantity(2*gb, resource.BinarySI)},
@@ -2165,7 +2165,7 @@ func TestNewManager(t *testing.T) {
 				1: nodeResources{v1.ResourceMemory: *resource.NewQuantity(2*gb, resource.BinarySI)},
 			},
 			affinity:         topologymanager.NewFakeManager(),
-			expectedError:    fmt.Errorf("the total amount of memory of type \"memory\" is not equal to the value determined by Node Allocatable feature"),
+			expectedError:    fmt.Errorf("the total amount of memory of type %q is not equal to the value determined by Node Allocatable feature", v1.ResourceMemory),
 			expectedReserved: expectedReserved,
 		},
 		{
@@ -2175,11 +2175,11 @@ func TestNewManager(t *testing.T) {
 			nodeAllocatableReservation: v1.ResourceList{},
 			preReservedMemory:          map[int]map[v1.ResourceName]resource.Quantity{},
 			affinity:                   topologymanager.NewFakeManager(),
-			expectedError:              fmt.Errorf("[memorymanager] you should specify the memory reserved for the system"),
+			expectedError:              fmt.Errorf("[memorymanager] you should specify the system reserved memory"),
 			expectedReserved:           expectedReserved,
 		},
 		{
-			description:                "Should return an error where policy name is not correct",
+			description:                "Should return an error when policy name is not correct",
 			policyName:                 "fake",
 			machineInfo:                machineInfo,
 			nodeAllocatableReservation: v1.ResourceList{},
@@ -2189,7 +2189,7 @@ func TestNewManager(t *testing.T) {
 			expectedReserved:           expectedReserved,
 		},
 		{
-			description:                "Should return manager with none policy",
+			description:                "Should create manager with \"none\" policy",
 			policyName:                 "none",
 			machineInfo:                machineInfo,
 			nodeAllocatableReservation: v1.ResourceList{},
@@ -2210,7 +2210,7 @@ func TestNewManager(t *testing.T) {
 			mgr, err := NewManager(testCase.policyName, &testCase.machineInfo, testCase.nodeAllocatableReservation, testCase.preReservedMemory, stateFileDirectory, testCase.affinity)
 
 			if !reflect.DeepEqual(err, testCase.expectedError) {
-				t.Errorf("Memory Manager NewManager() error, expected error '%v', but got: '%v'",
+				t.Errorf("Could not create the Memory Manager. Expected error: '%v', but got: '%v'",
 					testCase.expectedError, err)
 			}
 
@@ -2218,17 +2218,17 @@ func TestNewManager(t *testing.T) {
 				if mgr != nil {
 					rawMgr := mgr.(*manager)
 					if !reflect.DeepEqual(rawMgr.policy.Name(), testCase.policyName) {
-						t.Errorf("Memory Manager NewManager() error, expected policyName %v, but got: %v",
+						t.Errorf("Could not create the Memory Manager. Expected policy name: %v, but got: %v",
 							testCase.policyName, rawMgr.policy.Name())
 					}
 					if testCase.policyName == "single-numa" {
 						if !reflect.DeepEqual(rawMgr.policy.(*singleNUMAPolicy).systemReserved, testCase.expectedReserved) {
-							t.Errorf("Memory Manager NewManager() error, expected systemReserved %+v, but got: %+v",
+							t.Errorf("Could not create the Memory Manager. Expected system reserved: %+v, but got: %+v",
 								testCase.expectedReserved, rawMgr.policy.(*singleNUMAPolicy).systemReserved)
 						}
 					}
 				} else {
-					t.Errorf("Memory Manager NewManager undexpected error, manager=nil and it shouldn't be.")
+					t.Errorf("Could not create the Memory Manager - manager is nil, but it should not be.")
 				}
 
 			}
@@ -2397,7 +2397,7 @@ func TestGetTopologyHints(t *testing.T) {
 			container := &pod.Spec.Containers[0]
 			hints := mgr.GetTopologyHints(pod, container)
 			if !reflect.DeepEqual(hints, testCase.expectedHints) {
-				t.Errorf("Hints were not generated properly. Hints generated %+v, hints expected %+v",
+				t.Errorf("Hints were not generated correctly. Hints generated: %+v, hints expected: %+v",
 					hints, testCase.expectedHints)
 			}
 		})
