@@ -21,13 +21,6 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
 )
 
-const (
-	// containerTopologyScope specifies the TopologyManagerScope per container.
-	containerTopologyScope = "container"
-	// podTopologyScope specifies the TopologyManagerScope per pod.
-	podTopologyScope = "pod"
-)
-
 // Policy interface for Topology Manager Pod Admit Result
 type Policy interface {
 	// Returns Policy Name
