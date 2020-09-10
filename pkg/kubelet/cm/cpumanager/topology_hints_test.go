@@ -62,13 +62,6 @@ func returnMachineInfo() cadvisorapi.MachineInfo {
 	}
 }
 
-func returnNumaNodeInfo() topology.NUMANodeInfo {
-	return topology.NUMANodeInfo{
-		0: cpuset.NewCPUSet(0, 6, 1, 7, 2, 8),
-		1: cpuset.NewCPUSet(3, 9, 4, 10, 5, 11),
-	}
-}
-
 func TestGetPodRequestedCPU(t *testing.T) {
 	CPUs := [][]struct {
 		request string
