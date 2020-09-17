@@ -18,7 +18,6 @@ package topologymanager
 
 import (
 	"fmt"
-	"sync"
 
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"k8s.io/api/core/v1"
@@ -55,10 +54,6 @@ type Manager interface {
 }
 
 type manager struct {
-	mutex sync.Mutex
-	//Mapping of a Pods mapping of Containers and their TopologyHints
-	//Indexed by PodUID to ContainerName
-	podTopologyHints PodTopologyHints
 	//Mapping of PodUID to ContainerID for Adding/Removing Pods from PodTopologyHints mapping
 	podMap map[string]string
 	//Topology Manager Policy
@@ -122,8 +117,6 @@ func (th *TopologyHint) LessThan(other TopologyHint) bool {
 	return th.NUMANodeAffinity.IsNarrowerThan(other.NUMANodeAffinity)
 }
 
-type PodTopologyHints map[string]map[string]TopologyHint
-
 var _ Manager = &manager{}
 
 //NewManager creates a new TopologyManager based on provided policy
@@ -158,26 +151,20 @@ func NewManager(topology []cadvisorapi.Node, topologyPolicyName string, topology
 		return nil, fmt.Errorf("unknown policy: \"%s\"", topologyPolicyName)
 	}
 
-	pth := &PodTopologyHints{}
-
 	var scope Scope
 	switch topologyScopeName {
 		
 	case containerTopologyScope:
-		scope = NewContainerScope(pth, policy)
+		scope = NewContainerScope(policy)
 
 	case podTopologyScope:
-		scope = NewPodScope(pth, policy)
+		scope = NewPodScope(policy)
 
 	default:
 		return nil, fmt.Errorf("unknown scope: \"%s\"", topologyScopeName)
 	}	
 
-
-	pm := make(map[string]string)
 	manager := &manager{
-		podTopologyHints: *pth,
-		podMap:           pm,
 		policy:           policy,
 		scope:            scope,
 	}
@@ -186,7 +173,7 @@ func NewManager(topology []cadvisorapi.Node, topologyPolicyName string, topology
 }
 
 func (m *manager) GetAffinity(podUID string, containerName string) TopologyHint {
-	return m.podTopologyHints[podUID][containerName]
+	return m.scope.GetAffinity(podUID, containerName)
 }
 
 func (m *manager) AddHintProvider(h HintProvider) {
@@ -194,27 +181,12 @@ func (m *manager) AddHintProvider(h HintProvider) {
 }
 
 func (m *manager) AddContainer(pod *v1.Pod, containerID string) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.podMap[containerID] = string(pod.UID)
+	m.scope.AddContainer(pod,containerID)
 	return nil
 }
 
 func (m *manager) RemoveContainer(containerID string) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	klog.Infof("[topologymanager] RemoveContainer - Container ID: %v", containerID)
-	podUIDString := m.podMap[containerID]
-	delete(m.podMap, containerID)
-	if _, exists := m.podTopologyHints[podUIDString]; exists {
-		delete(m.podTopologyHints[podUIDString], containerID)
-		if len(m.podTopologyHints[podUIDString]) == 0 {
-			delete(m.podTopologyHints, podUIDString)
-		}
-	}
-
+	m.scope.RemoveContainer(containerID)
 	return nil
 }
 

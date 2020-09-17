@@ -32,12 +32,14 @@ type containerScope struct {
 // Ensure containerScope implements Scope interface
 var _ Scope = &containerScope{}
 
-func NewContainerScope(podTopologyHints *PodTopologyHints, policy Policy) Scope {
+func NewContainerScope(policy Policy) Scope {
+	pm := make(map[string]string)
 	return &containerScope{
 		scope{
 			name: containerTopologyScope,
-			podTopologyHints: podTopologyHints,
+			podTopologyHints: PodTopologyHints{},
 			policy: policy,
+			podMap: pm,
 		},
 	}
 }
@@ -76,12 +78,12 @@ func (s *containerScope) Admit(pod *v1.Pod) lifecycle.PodAdmitResult{
 			return topologyAffinityError()
 		}
 
-		if (*s.podTopologyHints)[string(pod.UID)] == nil {
-			(*s.podTopologyHints)[string(pod.UID)] = make(map[string]TopologyHint)
+		if (s.podTopologyHints)[string(pod.UID)] == nil {
+			(s.podTopologyHints)[string(pod.UID)] = make(map[string]TopologyHint)
 		}
 
 		klog.Infof("[topologymanager] Topology Affinity for (pod: %v container: %v): %v", format.Pod(pod), container.Name, bestHint)
-		(*s.podTopologyHints)[string(pod.UID)][container.Name]=bestHint
+		(s.podTopologyHints)[string(pod.UID)][container.Name]=bestHint
 		err := s.allocateAlignedResources(pod, &container)
 		if err != nil {
 			return unexpectedAdmissionError(err)
@@ -89,3 +91,4 @@ func (s *containerScope) Admit(pod *v1.Pod) lifecycle.PodAdmitResult{
 	}
 	return admitPod()
 }
+
