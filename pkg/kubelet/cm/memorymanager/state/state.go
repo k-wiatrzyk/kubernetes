@@ -83,6 +83,7 @@ type Block struct {
 	NUMAAffinity []int           `json:"numaAffinity"`
 	Type         v1.ResourceName `json:"type"`
 	Size         uint64          `json:"size"`
+	Reused		 uint64	         `json:"reused`
 }
 
 // ContainerMemoryAssignments stores memory assignments of containers
