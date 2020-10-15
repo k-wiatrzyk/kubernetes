@@ -127,6 +127,8 @@ type testStaticPolicy struct {
 	pod                   *v1.Pod
 	topologyHint          *topologymanager.TopologyHint
 	expectedTopologyHints map[string][]topologymanager.TopologyHint
+	memoryToReuse		  map[string][]state.Block
+	expectedMemoryToReuse map[string][]state.Block
 }
 
 func initTests(testCase *testStaticPolicy, hint *topologymanager.TopologyHint) (Policy, state.State, error) {
@@ -2336,6 +2338,232 @@ func TestStaticPolicyGetTopologyHints(t *testing.T) {
 			topologyHints := p.GetTopologyHints(s, testCase.pod, &testCase.pod.Spec.Containers[0])
 			if !reflect.DeepEqual(topologyHints, testCase.expectedTopologyHints) {
 				t.Fatalf("The actual topology hints: '%+v' are different from the expected one: '%+v'", topologyHints, testCase.expectedTopologyHints)
+			}
+		})
+	}
+}
+
+func TestReusableMemory(t *testing.T) {
+	testCases := []testStaticPolicy{
+		{
+			description: "should inherit",
+			assignments: state.ContainerMemoryAssignments{
+				"pod2": map[string][]state.Block{
+					"initContainer": {
+						{
+							NUMAAffinity: []int{0},
+							Type:         v1.ResourceMemory,
+							Size:         5 * gb,
+						},
+						{
+							NUMAAffinity: []int{0},
+							Type:         hugepages1Gi,
+							Size:         5 * gb,
+						},
+					},
+				},
+			},
+			expectedAssignments: state.ContainerMemoryAssignments{
+				"pod2": map[string][]state.Block{
+					"initContainer": {
+						{
+							NUMAAffinity: []int{0},
+							Type:         v1.ResourceMemory,
+							Size:         5 * gb,
+						},
+						{
+							NUMAAffinity: []int{0},
+							Type:         hugepages1Gi,
+							Size:         5 * gb,
+						},
+					},
+					"container2": {
+						{
+							NUMAAffinity: []int{0},
+							Type:         v1.ResourceMemory,
+							Size:         0,
+							Reused: 1 * gb,
+						},
+						{
+							NUMAAffinity: []int{0},
+							Type:         hugepages1Gi,
+							Size:         0,
+							Reused: 	1 * gb,
+						},
+					},
+				},
+			},
+			machineState: state.NodeMap{
+				0: &state.NodeState{
+					MemoryMap: map[v1.ResourceName]*state.MemoryTable{
+						v1.ResourceMemory: {
+							Allocatable:    9 * gb,
+							Free:           4 * gb,
+							Reserved:       5,
+							SystemReserved:  1 * gb,
+							TotalMemSize:   10 * gb,
+						},
+						hugepages1Gi: {
+							Allocatable:    10 * gb,
+							Free:           5 * gb,
+							Reserved:       5,
+							SystemReserved: 0,
+							TotalMemSize:   10 * gb,
+						},
+					},
+					Nodes:               []int{0},
+					NumberOfAssignments: 2,
+				},
+				1: &state.NodeState{
+					MemoryMap: map[v1.ResourceName]*state.MemoryTable{
+						v1.ResourceMemory: {
+							Allocatable:    9 * gb,
+							Free:           9 * gb,
+							Reserved:       0,
+							SystemReserved:  1 * gb,
+							TotalMemSize:   10 * gb,
+						},
+						hugepages1Gi: {
+							Allocatable:    10 * gb,
+							Free:           10 * gb,
+							Reserved:       0,
+							SystemReserved: 0,
+							TotalMemSize:   10 * gb,
+						},
+					},
+					Nodes:               []int{1},
+					NumberOfAssignments: 0,
+				},
+			},
+			expectedMachineState: state.NodeMap{
+				0: &state.NodeState{
+					MemoryMap: map[v1.ResourceName]*state.MemoryTable{
+						v1.ResourceMemory: {
+							Allocatable:    9 * gb,
+							Free:           4 * gb,
+							Reserved:       5,
+							SystemReserved:  1 * gb,
+							TotalMemSize:   10 * gb,
+						},
+						hugepages1Gi: {
+							Allocatable:    10 * gb,
+							Free:           5 * gb,
+							Reserved:       5,
+							SystemReserved: 0,
+							TotalMemSize:   10 * gb,
+						},
+					},
+					Nodes:               []int{0},
+					NumberOfAssignments: 4,
+				},
+				1: &state.NodeState{
+					MemoryMap: map[v1.ResourceName]*state.MemoryTable{
+						v1.ResourceMemory: {
+							Allocatable:    9 * gb,
+							Free:           9 * gb,
+							Reserved:       0,
+							SystemReserved:  1 * gb,
+							TotalMemSize:   10 * gb,
+						},
+						hugepages1Gi: {
+							Allocatable:    10 * gb,
+							Free:           10 * gb,
+							Reserved:       0,
+							SystemReserved: 0,
+							TotalMemSize:   10 * gb,
+						},
+					},
+					Nodes:               []int{1},
+					NumberOfAssignments: 0,
+				},
+			},
+			pod: getPod("pod2", "container2", requirementsGuaranteed),
+			systemReserved: systemReservedMemory{
+				0: map[v1.ResourceName]uint64{
+					v1.ResourceMemory: 1 * gb,
+				},
+				1: map[v1.ResourceName]uint64{
+					v1.ResourceMemory: 1 * gb,
+				},
+			},
+			expectedTopologyHints: map[string][]topologymanager.TopologyHint{
+				string(v1.ResourceMemory): {
+					{
+						NUMANodeAffinity: newNUMAAffinity(0),
+						Preferred:        true,
+					},
+				},
+				string(hugepages1Gi): {
+					{
+						NUMANodeAffinity: newNUMAAffinity(0),
+						Preferred:        true,
+					},
+				},
+			},
+			memoryToReuse: map[string][]state.Block{
+				"pod2":[]state.Block{
+					{
+						NUMAAffinity: []int{0},          
+						Type:       v1.ResourceMemory,
+						Size:         5*gb,               
+					},
+					{
+						NUMAAffinity: []int{0},          
+						Type:       hugepages1Gi,
+						Size:         5*gb,               
+					},
+				},
+			},
+			expectedMemoryToReuse: map[string][]state.Block{
+				"pod2":[]state.Block{
+					{
+						NUMAAffinity: []int{0},          
+						Type:       v1.ResourceMemory,
+						Size:         4*gb,               
+					},
+					{
+						NUMAAffinity: []int{0},          
+						Type:       hugepages1Gi,
+						Size:         4*gb,               
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.description, func(t *testing.T) {
+			p, s, err := initTests(&testCase, nil)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			p.(*staticPolicy).memoryToReuse = testCase.memoryToReuse
+
+			topologyHints := p.GetTopologyHints(s, testCase.pod, &testCase.pod.Spec.Containers[0])
+			if !reflect.DeepEqual(topologyHints, testCase.expectedTopologyHints) {
+				t.Fatalf("The actual topology hints: \n '%+v' \n are different from the expected one: \n '%+v'", topologyHints, testCase.expectedTopologyHints)
+			}
+
+
+			tm := topologymanager.NewFakeMangerWithHint(&topologymanager.TopologyHint{
+				NUMANodeAffinity: newNUMAAffinity(0),
+				Preferred:        true,
+			})
+			
+			p.(*staticPolicy).affinity = tm
+			err = p.Allocate(s, testCase.pod, &testCase.pod.Spec.Containers[0])
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if !reflect.DeepEqual(s.GetMemoryAssignments(), testCase.expectedAssignments) {
+				t.Fatalf("The assignments: \n '%+v' \n are different from the expected one: \n '%+v'", s.GetMemoryAssignments(), testCase.expectedAssignments)
+			}
+			if !reflect.DeepEqual(p.(*staticPolicy).memoryToReuse, testCase.memoryToReuse) {
+				t.Fatalf("The actual reusable memory: \n '%+v' \n are different from the expected one: \n '%+v'", p.(*staticPolicy).memoryToReuse, testCase.memoryToReuse)
+			}
+			if !reflect.DeepEqual(s.GetMachineState(), testCase.expectedMachineState) {
+				t.Fatalf("The actual machineState: \n '%+v' \n is different from the expected one: \n '%+v'", s.GetMachineState(), testCase.expectedMachineState)
 			}
 		})
 	}
